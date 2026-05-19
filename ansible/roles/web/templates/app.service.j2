@@ -1,0 +1,13 @@
+[Unit]
+Description=Task Tracker Flask Application
+After=network.target
+
+[Service]
+User=operator
+Group=operator
+WorkingDirectory=/opt/task_tracker
+ExecStart=/opt/task_tracker/venv/bin/python app.py --db-host {{ hostvars[groups['db'][0]]['inventory_hostname'] }} --db-user app_user --db-password app_password_123 --db-name tasks_db --host 127.0.0.1 --port 5004
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

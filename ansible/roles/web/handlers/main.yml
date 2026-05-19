@@ -1,0 +1,10 @@
+---
+- name: Restart App
+  ansible.builtin.systemd:
+    name: app.service
+    state: restarted
+
+- name: Reload Nginx
+  ansible.builtin.systemd:
+    name: nginx
+    state: reloaded

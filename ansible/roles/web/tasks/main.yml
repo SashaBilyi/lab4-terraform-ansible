@@ -1,0 +1,102 @@
+---
+- name: Встановлення системних залежностей для Flask та MariaDB
+  ansible.builtin.apt:
+    name:
+      - python3-venv
+      - python3-dev
+      - libmariadb-dev
+      - build-essential
+      - nginx
+    state: present
+    update_cache: yes
+
+- name: Створення користувача operator з паролем за-замовчуванням
+  ansible.builtin.user:
+    name: operator
+    system: yes
+    create_home: yes
+    shell: /bin/bash
+    password: "{{ '12345678' | password_hash('sha512') }}"
+
+- name: Налаштування sudo для operator (без пароля для сервісів)
+  ansible.builtin.template:
+    src: operator_sudoers.j2
+    dest: /etc/sudoers.d/operator
+    mode: '0440'
+    validate: /usr/sbin/visudo -cf %s
+
+- name: Створення директорії для застосунку
+  ansible.builtin.file:
+    path: /opt/task_tracker
+    state: directory
+    owner: operator
+    group: operator
+    mode: '0755'
+
+- name: Копіювання файлів застосунку
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/opt/task_tracker/{{ item }}"
+    owner: operator
+    group: operator
+    mode: '0644'
+  loop:
+    - app.py
+    - migrate.py
+    - requirements.txt
+
+- name: Створення віртуального середовища та встановлення залежностей (pip)
+  ansible.builtin.pip:
+    requirements: /opt/task_tracker/requirements.txt
+    virtualenv: /opt/task_tracker/venv
+    virtualenv_command: python3 -m venv
+
+- name: Запуск міграції бази даних (створення таблиць)
+  ansible.builtin.command:
+    cmd: >
+      /opt/task_tracker/venv/bin/python /opt/task_tracker/migrate.py
+      --db-host {{ hostvars[groups['db'][0]]['inventory_hostname'] }}
+      --db-user app_user
+      --db-password app_password_123
+      --db-name tasks_db
+  changed_when: false
+
+- name: Генерація systemd сервісу для застосунку
+  ansible.builtin.template:
+    src: app.service.j2
+    dest: /etc/systemd/system/app.service
+    mode: '0644'
+  notify: Restart App
+
+- name: Генерація конфігурації Nginx
+  ansible.builtin.template:
+    src: nginx.conf.j2
+    dest: /etc/nginx/sites-available/task_tracker
+    mode: '0644'
+  notify: Reload Nginx
+
+- name: Увімкнення конфігурації сайту Nginx
+  ansible.builtin.file:
+    src: /etc/nginx/sites-available/task_tracker
+    dest: /etc/nginx/sites-enabled/task_tracker
+    state: link
+  notify: Reload Nginx
+
+- name: Видалення сайту Nginx за замовчуванням
+  ansible.builtin.file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  notify: Reload Nginx
+
+- name: Увімкнення та запуск веб-застосунку
+  ansible.builtin.systemd:
+    name: app.service
+    daemon_reload: yes
+    state: started
+    enabled: yes
+
+- name: Увімкнення та запуск Nginx
+  ansible.builtin.systemd:
+    name: nginx
+    state: started
+    enabled: yes
