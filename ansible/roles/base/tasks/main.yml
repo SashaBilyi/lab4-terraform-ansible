@@ -1,0 +1,20 @@
+---
+- name: Ensure teacher user exists with default password
+  ansible.builtin.user:
+    name: teacher
+    password: "{{ '12345678' | password_hash('sha512') }}"
+    groups: sudo
+    append: yes
+    shell: /bin/bash
+
+- name: Ensure student directory exists
+  ansible.builtin.file:
+    path: /home/student
+    state: directory
+    mode: '0755'
+
+- name: Create gradebook file with list number
+  ansible.builtin.copy:
+    content: "4\n"
+    dest: /home/student/gradebook
+    mode: '0644'

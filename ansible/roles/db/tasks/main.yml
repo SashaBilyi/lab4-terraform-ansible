@@ -1,0 +1,36 @@
+---
+- name: Встановлення MariaDB та бібліотеки для Ansible
+  ansible.builtin.apt:
+    name:
+      - mariadb-server
+      - python3-pymysql
+    state: present
+    update_cache: yes
+
+- name: Дозвіл MariaDB слухати зовнішні з'єднання
+  ansible.builtin.lineinfile:
+    path: /etc/mysql/mariadb.conf.d/50-server.cnf
+    regexp: '^bind-address'
+    line: 'bind-address = 0.0.0.0'
+  notify: Restart MariaDB
+
+- name: Перевірка, що MariaDB запущена та додана в автозавантаження
+  ansible.builtin.systemd:
+    name: mariadb
+    state: started
+    enabled: yes
+
+- name: Створення бази даних для застосунку
+  community.mysql.mysql_db:
+    name: tasks_db
+    state: present
+    login_unix_socket: /var/run/mysqld/mysqld.sock
+
+- name: Створення користувача БД з доступом тільки для worker-vm
+  community.mysql.mysql_user:
+    name: app_user
+    password: "app_password_123"
+    priv: 'tasks_db.*:ALL'
+    host: "{{ hostvars[groups['workers'][0]]['inventory_hostname'] }}"
+    state: present
+    login_unix_socket: /var/run/mysqld/mysqld.sock
